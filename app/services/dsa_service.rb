@@ -1,4 +1,4 @@
-class RsaService
+class DsaService
   attr_accessor :private_key, :public_key, :private_key_pem,
                 :public_key_pem, :type, :bits, :passphrase, :pem_key, :passphrase_pem
 
@@ -16,24 +16,25 @@ class RsaService
   end
 
   def generate
-    @rsa = OpenSSL::PKey::RSA.new bits.to_i
-    @private_key = @passphrase.present? ? cipher_encrypt :  @rsa.to_pem
-    @public_key = @rsa.public_key.to_pem
+    @dsa = OpenSSL::PKey::DSA.new bits.to_i
+    @private_key = @passphrase.present? ? cipher_encrypt :  @dsa.to_pem
+    @public_key = @dsa.public_key.to_pem
     @private_key_pem = @save_pem.call(file_path('private'), @private_key)
     @public_key_pem = @save_pem.call(file_path('public'), @public_key)
     @passphrase_pem = @save_pem.call(file_path('passphrase'), @passphrase) if @passphrase.present?
     self
   end
 
-  def encrypt(text)
-    encryptor = OpenSSL::PKey::RSA.new @public_key || File.read(@public_key_pem)
-    encryptor.public_encrypt text
+  def sign(text)
+    digest = OpenSSL::Digest::SHA1.digest(text)
+    sig = @dsa.syssign(digest)
   end
 
-  def decrypt(text)
+  def verify_sign(text, sign)
     key = @private_key || File.read(@private_key_pem)
-    decryptor = @passphrase.present? ? OpenSSL::PKey::RSA.new(key, @passphrase) : OpenSSL::PKey::RSA.new(key)
-    decryptor.private_decrypt text
+    @dsa = @passphrase.present? ? OpenSSL::PKey::DSA.new(key, @passphrase) : OpenSSL::PKey::DSA.new(key)
+    digest = OpenSSL::Digest::SHA1.digest(text)
+    @dsa.sysverify(digest, sign)
   end
 
   private
@@ -44,11 +45,11 @@ class RsaService
 
   def cipher_encrypt
     cipher = OpenSSL::Cipher.new 'AES-128-CBC'
-    key_secure = @rsa.export cipher, @passphrase
+    key_secure = @dsa.export cipher, @passphrase
   end
 
   def file_path(key_type)
-    "rsa/#{@pem_key}_#{key_type}_key.pem"
+    "dsa/#{@pem_key}_#{key_type}_key.pem"
   end
 
   def init_pem_builder
@@ -56,9 +57,9 @@ class RsaService
   end
 
   def check_and_set_pem_files
-    @private_key_pem = "rsa/#{@pem_key}_private_key.pem"
-    @public_key_pem = "rsa/#{@pem_key}_public_key.pem"
-    passphrase_pem = "rsa/#{@pem_key}_passphrase_key.pem" 
+    @private_key_pem = "dsa/#{@pem_key}_private_key.pem"
+    @public_key_pem = "dsa/#{@pem_key}_public_key.pem"
+    passphrase_pem = "dsa/#{@pem_key}_passphrase_key.pem" 
     if File.exist?(passphrase_pem)
       @passphrase_pem = passphrase_pem
       @passphrase = File.read(passphrase_pem)
